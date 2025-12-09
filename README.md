@@ -1,7 +1,11 @@
 ## Project Overview
 
-This project implements an Incremental Structure from Motion (SfM) pipeline in Python. It takes a sequence of 2D images of a bricked wall and reconstructs a sparse 3D point cloud of the scene.
+1. Reconstruction: This project implements an Incremental Structure from Motion (SfM) pipeline in Python. It takes a sequence of 2D images of a bricked wall and reconstructs a sparse 3D point cloud of the scene.
 The pipeline utilizes SIFT features for matching, solves the PnP problem to register new cameras, performs triangulation to generate 3D points and optimizes the reconstruction using Bundle Adjustment.
+2. Visualization: An interactive, web-based Virtual Tour using Three.js that renders the reconstructed scene with smooth navigation mechanics.
+
+## Phase 1: Structure from Motion (Python)
+The reconstruction pipeline takes a sequence of 2D images of a bricked wall and generates a sparse 3D point cloud.
 
 ## Key Features
 
@@ -21,9 +25,9 @@ The pipeline utilizes SIFT features for matching, solves the PnP problem to regi
 6. triangulation_utils.py: Converts matched 2D points from two camera views into a 3D point using cv2.triangulatePoints. It includes checks to remove points behind the camera or too far away.
 7. bundle_adjustment.py: Refines the camera poses and 3D point positions. It constructs a sparse Jacobian matrix and uses scipy.optimize.least_squares to minimize the reprojection error.
 8. remove_outliers.py: A post-processing script. The raw output from the pipeline (reconstruction_result.ply) contains floating noise. This script filters points based on coordinate bounds and statistical distances, saving the cleaned result as reconstruction_clean.ply.
-9. plot_3d.py: A visualization utility using Matplotlib. It plots the 3D point cloud with RGB colors and includes an internal filter to hide extreme statistical outliers during the interactive display.
+9. plot_3d.py: A visualization utility using Matplotlib. It plots the 3D point cloud with RGB colors and includes an internal filter to hide extreme statistical outliers during the interactive display. 
 
-## Results
+## Results 
 
  3D plot made using matplotlib
  ![alt text](3D_reconstruction.png)
@@ -31,8 +35,7 @@ The pipeline utilizes SIFT features for matching, solves the PnP problem to regi
  Visualisation on CloudCompare
  ![alt text](point_cloud_ss.bmp)
 
- ## Installation and Usage
-
+ ## Installation and Usage 
 1. Install Dependencies: pip install numpy opencv-python scipy matplotlib
 2. Run the Reconstruction: python main.py
    
@@ -49,3 +52,103 @@ Output: reconstruction_clean.ply
    OR
    
 2. PLY Files: You can also import the generated reconstruction_clean.ply.
+
+
+
+## Phase 2: Interactive Virtual Tour (Web/Three.js)
+The second phase bridges the gap between raw data and user experience. It renders a high-density point cloud in a web browser, allowing users to navigate through the room via a curated path.
+
+##Here is the updated README.md. I have kept your original SfM section and added a new Phase 2: Virtual Tour section that documents the Three.js work we just finished.
+
+3D Scene Reconstruction and Virtual Tour
+Project Overview
+This project implements a complete 3D computer vision pipeline divided into two phases:
+
+Reconstruction: An incremental Structure from Motion (SfM) pipeline in Python that recovers sparse 3D geometry from 2D images.
+
+Visualization: An interactive, web-based Virtual Tour using Three.js that renders the reconstructed scene with smooth navigation mechanics.
+
+Phase 1: Structure from Motion (Python)
+The reconstruction pipeline takes a sequence of 2D images of a bricked wall and generates a sparse 3D point cloud.
+
+Key Features
+Feature Extraction: SIFT is used to detect keypoints and descriptors.
+
+Geometric Verification: Matches are filtered using Homography (for planar surfaces) and Fundamental Matrix (for non-planar) checks.
+
+Initialization: The reconstruction is seeded using an initial pair of frames (Frame 0 and Frame 2).
+
+Incremental Reconstruction: New frames are added sequentially via PnP and triangulation.
+
+Optimization: Bundle Adjustment is applied periodically to minimize reprojection error.
+
+Code Description
+main.py: The core pipeline. Handles initialization, incremental registration, triangulation, and triggers optimization.
+
+dataset_loader.py: Loads images using a natural sort algorithm to ensure correct numerical processing order.
+
+feature_utils.py: Implements OpenCV's SIFT to extract keypoints and descriptors.
+
+matching_utils.py: Handles feature matching using BFMatcher with Lowe’s Ratio Test.
+
+pnp_utils.py: Estimates camera pose (cv2.solvePnPRansac) for new frames relative to the map.
+
+triangulation_utils.py: Converts 2D matches into 3D points (cv2.triangulatePoints) with cheirality checks.
+
+bundle_adjustment.py: Refines poses and points using sparse Jacobian optimization (scipy.optimize.least_squares).
+
+remove_outliers.py: Post-processing script that filters noise based on coordinate bounds and statistical distances.
+
+plot_3d.py: A Matplotlib-based viewer for immediate feedback on the reconstruction.
+
+Usage (Reconstruction)
+Install Dependencies:
+
+Bash
+
+pip install numpy opencv-python scipy matplotlib
+Run Pipeline:
+
+Bash
+
+python main.py
+Clean Noise:
+
+Bash
+
+python remove_outliers.py
+
+Phase 2: Interactive Virtual Tour (Web/Three.js)
+The second phase bridges the gap between raw data and user experience. It renders a high-density point cloud in a web browser, allowing users to navigate through the room via a curated path.
+
+## Key Features
+1. Coordinate Alignment: Automatically transforms the raw Photogrammetry data (Z-Up) to the WebGL coordinate system (Y-Up) by applying a -90° rotation to the world group.
+
+2. Manual Node Curation: Uses a custom "Builder Tool" to define geometrically valid viewpoints, avoiding collisions with walls or ceilings.
+
+3. Smooth Interpolation: Implements Linear Interpolation (Lerp) for position and Spherical Linear Interpolation (Slerp) for rotation to ensure cinematic camera movement.
+
+4. Visual Polish: Features a clean UI, CSS-based cross-fading during transitions, and optimized binary PLY loading for performance. 
+
+## Code Description
+
+1. virtualtour.html: The final application. It loads the point cloud, renders the navigation nodes (blue spheres), and handles the user interaction logic.
+
+2. index.html: A developer tool used to create the tour. It allows "Free Fly" navigation (WASD) to explore the scene and record coordinates for the final tour.
+
+3. optimizer.py: A Python script utilizing the Open3D library. It downsamples the raw, high-density point cloud and converts it into a binary PLY format (room_binary.ply) to ensure low-latency loading in the web browser.
+
+4. room_binary.ply: The processed, binary-encoded 3D point cloud file served to the client.
+
+5. xmltojson.py: A helper script designed to parse the raw camera pose data exported from Agisoft Metashape (.xml) and convert it into a lightweight JSON format usable by the web application.
+
+Usage (Virtual Tour) 
+Start Local Server: Download the extension "Live Server" and open the html file "virtualtour.html" with live server extension. 
+
+Controls:
+
+Left Click: Rotate View
+
+Scroll: Zoom In/Out
+
+Click Blue Sphere: Fly to that location
