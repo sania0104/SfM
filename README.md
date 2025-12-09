@@ -70,7 +70,7 @@ The second phase bridges the gap between raw data and user experience. It render
 2. index.html: A developer tool used to create the tour. It allows "Free Fly" navigation (WASD) to explore the scene and record coordinates for the final tour.
 3. optimizer.py: A Python script utilizing the Open3D library. It downsamples the raw, high-density point cloud and converts it into a binary PLY format (room_binary.ply) to ensure low-latency loading in the web browser.
 
-Usage
+## Usage
 Start Local Server: Download the extension "Live Server" and open the html file "virtualtour.html" with live server extension. 
 
 Controls:
@@ -80,3 +80,8 @@ Left Click: Rotate View
 Scroll: Zoom In/Out
 
 Click Blue Sphere: Fly to that location
+
+## Results
+![alt text](3D_reconstruction.png)
+<img width="1919" height="1020" alt="image" src="https://github.com/user-attachments/assets/870923cc-5a44-4fe1-9c59-f55461914b80" />
+
