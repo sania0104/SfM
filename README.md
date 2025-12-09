@@ -1,7 +1,11 @@
 ## Project Overview
 
-This project implements an Incremental Structure from Motion (SfM) pipeline in Python. It takes a sequence of 2D images of a bricked wall and reconstructs a sparse 3D point cloud of the scene.
+1. Reconstruction: This project implements an Incremental Structure from Motion (SfM) pipeline in Python. It takes a sequence of 2D images of a bricked wall and reconstructs a sparse 3D point cloud of the scene.
 The pipeline utilizes SIFT features for matching, solves the PnP problem to register new cameras, performs triangulation to generate 3D points and optimizes the reconstruction using Bundle Adjustment.
+2. Visualization: An interactive, web-based Virtual Tour using Three.js that renders the reconstructed scene with smooth navigation mechanics.
+
+## Phase 1: Structure from Motion (Python)
+The reconstruction pipeline takes a sequence of 2D images of a bricked wall and generates a sparse 3D point cloud.
 
 ## Key Features
 
@@ -49,3 +53,30 @@ Output: reconstruction_clean.ply
    OR
    
 2. PLY Files: You can also import the generated reconstruction_clean.ply.
+
+
+## Phase 2: Interactive Virtual Tour (Web/Three.js)
+The second phase bridges the gap between raw data and user experience. It renders a high-density point cloud in a web browser, allowing users to navigate through the room via a curated path.
+
+## Key Features
+1. Coordinate Alignment: Automatically transforms the raw Photogrammetry data (Z-Up) to the WebGL coordinate system (Y-Up) by applying a -90° rotation to the world group.
+2. Manual Node Curation: Uses a custom "Builder Tool" to define geometrically valid viewpoints, avoiding collisions with walls or ceilings.
+3. Smooth Interpolation: Implements Linear Interpolation (Lerp) for position and Spherical Linear Interpolation (Slerp) for rotation to ensure cinematic camera movement.
+4. Visual Polish: Features a clean UI, CSS-based cross-fading during transitions, and optimized binary PLY loading for performance. 
+
+## Code Description
+
+1. virtualtour.html: The final application. It loads the point cloud, renders the navigation nodes (blue spheres), and handles the user interaction logic.
+2. index.html: A developer tool used to create the tour. It allows "Free Fly" navigation (WASD) to explore the scene and record coordinates for the final tour.
+3. optimizer.py: A Python script utilizing the Open3D library. It downsamples the raw, high-density point cloud and converts it into a binary PLY format (room_binary.ply) to ensure low-latency loading in the web browser.
+
+Usage
+Start Local Server: Download the extension "Live Server" and open the html file "virtualtour.html" with live server extension. 
+
+Controls:
+
+Left Click: Rotate View
+
+Scroll: Zoom In/Out
+
+Click Blue Sphere: Fly to that location
