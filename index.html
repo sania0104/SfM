@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CS436 Tour Builder (Unrestricted)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #info {
+            position: absolute; top: 10px; width: 100%; text-align: center; color: white;
+            font-family: monospace; pointer-events: none; text-shadow: 1px 1px 2px black;
+            font-size: 16px; z-index: 10;
+        }
+        #controls-ui {
+            position: absolute; top: 50px; right: 10px; 
+            background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;
+            color: white; font-family: sans-serif; z-index: 20;
+        }
+        button {
+            background: #0088ff; color: white; border: none; padding: 10px; 
+            cursor: pointer; font-size: 14px; width: 100%; margin-top: 10px;
+            font-weight: bold; border-radius: 4px;
+        }
+        button:hover { background: #0066cc; }
+        #loading {
+            position: absolute; top: 50%; width: 100%; text-align: center; color: yellow;
+            font-family: sans-serif; font-size: 20px; pointer-events: none;
+        }
+        .key { color: #00ff00; font-weight: bold; }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="info">
+        <b>UNRESTRICTED BUILDER</b><br>
+        Move: <span class="key">W A S D</span> | Up/Down: <span class="key">Q E</span><br>
+        Look: <span class="key">Left Click Drag</span> | Add Node: <span class="key">SPACE</span>
+    </div>
+    <div id="loading">Loading Point Cloud...</div>
+    
+    <div id="controls-ui">
+        <div>Nodes Created: <span id="count">0</span></div>
+        <button id="exportBtn">EXPORT NODES</button>
+        <div style="font-size: 12px; color: #aaa; margin-top: 5px; text-align: center;">(Check Console F12)</div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+
+        // --- CALIBRATED SETTINGS ---
+        const ROT_X = -90.0;
+        const ROT_Y = 0.0;
+        const ROT_Z = 1.0;
+
+        let scene, camera, renderer, controls;
+        let worldGroup; 
+        let manualNodes = []; 
+        
+        const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
+        const moveSpeed = 0.1; // Speed of movement
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111111);
+
+            // FIX 1: Set near plane to 0.001 (1 millimeter)
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 1000);
+            camera.position.set(0, 1.7, 5); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.1;
+            controls.enablePan = false; 
+            controls.enableZoom = true; 
+            controls.rotateSpeed = 0.5;
+            
+            // FIX 2: REMOVED Angle Limits (Look wherever you want)
+            controls.minDistance = 0.0; // Allow getting infinitely close
+
+            worldGroup = new THREE.Group();
+            worldGroup.rotation.x = THREE.MathUtils.degToRad(ROT_X);
+            worldGroup.rotation.y = THREE.MathUtils.degToRad(ROT_Y);
+            worldGroup.rotation.z = THREE.MathUtils.degToRad(ROT_Z);
+            scene.add(worldGroup);
+
+            const loader = new PLYLoader();
+            loader.load('./room_binary.ply', function (geometry) { 
+                setupScene(geometry);
+            }, undefined, function(err) {
+                loader.load('./room.ply', (geo) => { setupScene(geo); });
+            });
+
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('exportBtn').addEventListener('click', exportData);
+        }
+
+        function setupScene(geometry) {
+            const material = new THREE.PointsMaterial({ size: 0.05, vertexColors: true });
+            const pointCloud = new THREE.Points(geometry, material);
+            worldGroup.add(pointCloud);
+
+            // Auto-Center
+            geometry.computeBoundingBox();
+            const center = new THREE.Vector3();
+            geometry.boundingBox.getCenter(center);
+            const worldCenter = center.clone().applyEuler(worldGroup.rotation);
+
+            controls.target.copy(worldCenter);
+            camera.position.copy(worldCenter);
+            camera.position.z += 2; 
+
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'KeyW': moveState.forward = true; break;
+                case 'KeyS': moveState.backward = true; break;
+                case 'KeyA': moveState.left = true; break;
+                case 'KeyD': moveState.right = true; break;
+                case 'KeyQ': moveState.up = true; break;
+                case 'KeyE': moveState.down = true; break;
+                case 'Space': addNode(); break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': moveState.forward = false; break;
+                case 'KeyS': moveState.backward = false; break;
+                case 'KeyA': moveState.left = false; break;
+                case 'KeyD': moveState.right = false; break;
+                case 'KeyQ': moveState.up = false; break;
+                case 'KeyE': moveState.down = false; break;
+            }
+        }
+
+        function processMovement() {
+            const moveDelta = new THREE.Vector3(0, 0, 0);
+
+            if (moveState.forward) moveDelta.z -= moveSpeed;
+            if (moveState.backward) moveDelta.z += moveSpeed;
+            if (moveState.left) moveDelta.x -= moveSpeed;
+            if (moveState.right) moveDelta.x += moveSpeed;
+            if (moveState.up) moveDelta.y += moveSpeed;
+            if (moveState.down) moveDelta.y -= moveSpeed;
+
+            // Apply rotation (Fly Mode)
+            const y = moveDelta.y; 
+            moveDelta.applyQuaternion(camera.quaternion); 
+            // NOTE: I removed the Y-flattening logic so you can fly freely up/down/forward
+            
+            camera.position.add(moveDelta);
+            controls.target.add(moveDelta);
+        }
+
+        function addNode() {
+            const camPos = new THREE.Vector3();
+            const camQuat = new THREE.Quaternion();
+            camera.getWorldPosition(camPos);
+            camera.getWorldQuaternion(camQuat);
+
+            // FIX 3: Still force upright roll (Z=0) so camera isn't tilted sideways
+            const euler = new THREE.Euler().setFromQuaternion(camQuat, 'YXZ');
+            euler.z = 0; 
+            camQuat.setFromEuler(euler);
+
+            const inverseWorldMatrix = worldGroup.matrixWorld.clone().invert();
+            const localPos = camPos.clone().applyMatrix4(inverseWorldMatrix);
+            
+            const inverseRot = worldGroup.quaternion.clone().invert();
+            const localQuat = camQuat.clone().premultiply(inverseRot);
+
+            const nodeData = {
+                pos: localPos.toArray(),
+                quat: localQuat.toArray()
+            };
+            manualNodes.push(nodeData);
+
+            const sphere = new THREE.Mesh(
+                new THREE.SphereGeometry(0.15, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+            );
+            sphere.position.copy(localPos);
+            sphere.quaternion.copy(localQuat);
+            sphere.add(new THREE.AxesHelper(0.5));
+            worldGroup.add(sphere);
+
+            document.getElementById('count').innerText = manualNodes.length;
+            console.log("Node Added (Safe)!", nodeData);
+        }
+
+        function exportData() {
+            const output = JSON.stringify(manualNodes, null, 2);
+            console.log("%c COPY THE TEXT BELOW:", "color: green; font-weight: bold; font-size: 14px;");
+            console.log(output);
+            alert("Nodes printed to Console (F12). Copy the text!");
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            processMovement(); 
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
