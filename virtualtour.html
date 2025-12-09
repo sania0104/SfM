@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CS436 Virtual Tour</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #ffffff; }
+        
+        #info {
+            position: absolute; top: 20px; width: 100%; text-align: center; 
+            color: #333; 
+            font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+            pointer-events: none; 
+            user-select: none; 
+            font-size: 16px; 
+            font-weight: 600;
+            z-index: 10;
+            text-shadow: 0px 0px 10px rgba(255,255,255,0.8);
+        }
+        
+        #loading {
+            position: absolute; top: 50%; width: 100%; text-align: center; 
+            color: #666;
+            font-family: sans-serif; font-size: 20px; pointer-events: none;
+        }
+
+        /* White Fade Overlay */
+        #fade-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: white; 
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.4s; z-index: 5;
+        }
+        
+        .instruction {
+            font-weight: 400; font-size: 14px; color: #555; margin-top: 5px;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="info">
+        Virtual tour room 404<br>
+        <div class="instruction">Click blue spheres to move • Left Click to Rotate • Scroll to Zoom</div>
+    </div>
+    <div id="loading">Loading 3D Scene...</div>
+    <div id="fade-overlay"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+
+        // --- CONFIGURATION ---
+        const ROT_X = -90.0;
+        const ROT_Y = 0.0;
+        const ROT_Z = 1.0;
+        
+        // VISUAL TWEAKS
+        const DOT_OFFSET_Y = -1.6;   // Meters DOWN (Visual position of dots)
+        const MOVE_FORWARD_OFFSET = 2; // Meters FORWARD (Increased from 0.5 to 0.8)
+        const DOT_SIZE = 0.12;       // Size of the blue dots
+
+        const TOUR_NODES = [
+            {
+                pos: [0.9294436833834346, -0.0016606934586610392, 1.198666336813324],
+                quat: [0.06252353530624032, 0.06241192051324734, 0.7037125643665014, 0.704971053635098]
+            },
+            {
+                pos: [0.9294436833834346, -0.0016606934586610392, -2.7513336631866516],
+                quat: [0.06252353530624032, 0.06241192051324734, 0.7037125643665014, 0.704971053635098]
+            },
+            {
+                pos: [0.9294436833834436, -0.0016606934586610549, -6.701333663186629],
+                quat: [0.06252353530624004, 0.06241192051324701, 0.7037125643665014, 0.7049710536350982]
+            },
+            {
+                pos: [0.9294436833834377, -0.0016606934586610427, -9.901333663186636],
+                quat: [0.06252353530623952, 0.06241192051324651, 0.7037125643665013, 0.7049710536350982]
+            },
+            {
+                pos: [0.9294436833834377, -0.0016606934586610427, -13.551333663186668],
+                quat: [0.06252353530623952, 0.06241192051324651, 0.7037125643665013, 0.7049710536350982]
+            },
+            {
+                pos: [-2.992381038776948, 2.5976623457628185, -10.991288356903087],
+                quat: [0.017372713789150125, 0.017805420926119475, 0.7155288696439988, 0.6981400951866504]
+            },
+            {
+                pos: [-2.906819192425675, -2.901897001618699, -11.990050668505562],
+                quat: [0.017372713789150125, 0.017805420926119475, 0.7155288696439988, 0.6981400951866504]
+            },
+            // {
+            //     pos: [-1.919479712578539, 0.6034306086937316, -9.351333663186614],
+            //     quat: [0.06252353530623886, 0.06241192051324629, 0.7037125643665026, 0.7049710536350974]
+            // },
+            {
+                pos: [-3.836616774570106, 0.6101138842739237, -9.34829643970785],
+                quat: [0.061461810655449686, 0.06115006197326239, 0.702650781785074, 0.7062329605791875]
+            }, 
+            {
+                pos: [0.6298316817099765, 0.2537848513250365, -16.512316158339186],
+                quat: [0.706794263259676, -0.7068915627922069, -0.019316969119334955, 0.01931431025033159]
+            }, 
+            
+            
+        ];
+
+        let scene, camera, renderer, controls, raycaster, mouse;
+        let worldGroup; 
+        let cameraNodes = [];
+        let isTransitioning = false;
+        
+        let localOffsetVector = new THREE.Vector3();
+
+        let transitionStartTime = 0;
+        const transitionDuration = 2.0; 
+        let startPos = new THREE.Vector3();
+        let endPos = new THREE.Vector3();
+        let startRot = new THREE.Quaternion();
+        let endRot = new THREE.Quaternion();
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.rotateSpeed = 0.5;
+            
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            window.addEventListener('click', onMouseClick, false);
+            window.addEventListener('resize', onWindowResize, false);
+
+            worldGroup = new THREE.Group();
+            worldGroup.rotation.x = THREE.MathUtils.degToRad(ROT_X);
+            worldGroup.rotation.y = THREE.MathUtils.degToRad(ROT_Y);
+            worldGroup.rotation.z = THREE.MathUtils.degToRad(ROT_Z);
+            scene.add(worldGroup);
+            
+            const worldDown = new THREE.Vector3(0, 1, 0); 
+            worldDown.multiplyScalar(DOT_OFFSET_Y); 
+            localOffsetVector = worldDown.clone().applyQuaternion(worldGroup.quaternion.clone().invert());
+
+            const loader = new PLYLoader();
+            loader.load('./room_binary.ply', function (geometry) { 
+                const material = new THREE.PointsMaterial({ size: 0.05, vertexColors: true });
+                const pointCloud = new THREE.Points(geometry, material);
+                worldGroup.add(pointCloud);
+                document.getElementById('loading').style.display = 'none';
+            }, undefined, function(err) {
+                console.error("Binary failed, trying ASCII...");
+                loader.load('./room.ply', (geo) => {
+                     const mat = new THREE.PointsMaterial({ size: 0.05, vertexColors: true });
+                     worldGroup.add(new THREE.Points(geo, mat));
+                     document.getElementById('loading').style.display = 'none';
+                });
+            });
+
+            createNodes();
+        }
+
+        function createNodes() {
+            const sphereGeo = new THREE.SphereGeometry(DOT_SIZE, 32, 32);
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0x0088ff });
+            
+            TOUR_NODES.forEach((nodeData, index) => {
+                const node = new THREE.Mesh(sphereGeo, sphereMat);
+                
+                // 1. Set original camera position
+                node.position.fromArray(nodeData.pos);
+                
+                // 2. Visually lower the dot to waist height
+                node.position.add(localOffsetVector);
+
+                node.quaternion.fromArray(nodeData.quat);
+                
+                // Store original eye-level position
+                node.userData = { 
+                    originalPos: new THREE.Vector3().fromArray(nodeData.pos),
+                    originalQuat: new THREE.Quaternion().fromArray(nodeData.quat)
+                };
+
+                worldGroup.add(node);
+                cameraNodes.push(node);
+
+                if (index === 0) {
+                    snapCameraToNode(node);
+                }
+            });
+        }
+
+        function snapCameraToNode(node) {
+            // Get Eye Level World Position
+            const targetLocal = node.userData.originalPos.clone();
+            const targetWorld = targetLocal.applyMatrix4(worldGroup.matrixWorld);
+            const targetRot = new THREE.Quaternion();
+            node.getWorldQuaternion(targetRot);
+
+            camera.position.copy(targetWorld);
+            camera.quaternion.copy(targetRot);
+            
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(targetRot);
+            controls.target.copy(targetWorld).add(forward);
+            controls.update();
+        }
+
+        function onMouseClick(event) {
+            if (isTransitioning) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(cameraNodes);
+
+            if (intersects.length > 0) {
+                const targetNode = intersects[0].object;
+                
+                // 1. Calculate World Position (Eye Level)
+                const targetLocal = targetNode.userData.originalPos.clone();
+                const targetWorld = targetLocal.applyMatrix4(worldGroup.matrixWorld);
+                
+                // 2. Calculate World Rotation
+                const targetRot = new THREE.Quaternion();
+                targetNode.getWorldQuaternion(targetRot);
+
+                // 3. APPLY "MOVE PAST" OFFSET
+                // Calculate Forward Vector based on where the node is looking
+                const forwardVec = new THREE.Vector3(0, 0, -1);
+                forwardVec.applyQuaternion(targetRot); // Rotate vector to match node
+                forwardVec.multiplyScalar(MOVE_FORWARD_OFFSET); // Scale distance
+                
+                // Add to final destination
+                targetWorld.add(forwardVec);
+
+                startTransition(targetWorld, targetRot);
+            }
+        }
+
+        function startTransition(targetPosition, targetQuaternion) {
+            const overlay = document.getElementById('fade-overlay');
+            overlay.style.opacity = 1;
+            setTimeout(() => { overlay.style.opacity = 0; }, 400);
+
+            isTransitioning = true;
+            transitionStartTime = performance.now();
+            
+            startPos.copy(camera.position);
+            startRot.copy(camera.quaternion);
+            endPos.copy(targetPosition);
+            endRot.copy(targetQuaternion);
+            
+            controls.enabled = false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isTransitioning) {
+                const now = performance.now();
+                let t = (now - transitionStartTime) / 1000 / transitionDuration;
+
+                if (t >= 1) {
+                    t = 1;
+                    isTransitioning = false;
+                    controls.enabled = true;
+                    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                    controls.target.copy(camera.position).add(forward);
+                }
+
+                camera.position.lerpVectors(startPos, endPos, t);
+                camera.quaternion.slerpQuaternions(startRot, endRot, t);
+
+            } else {
+                controls.update();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
