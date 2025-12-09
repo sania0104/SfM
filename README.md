@@ -82,6 +82,5 @@ Scroll: Zoom In/Out
 Click Blue Sphere: Fly to that location
 
 ## Results
-![alt text](3D_reconstruction.png)
 <img width="1919" height="1020" alt="image" src="https://github.com/user-attachments/assets/870923cc-5a44-4fe1-9c59-f55461914b80" />
 
